@@ -20,7 +20,7 @@ loading_y/
     └── loading_y_test.pwn
 ```
 
-**New here?** Read [HOW_IT_WORKS.md](HOW_IT_WORKS.md) first (player view, hit/miss, script flow).
+**New here?** Read [HOW_IT_WORKS.md](HOW_IT_WORKS.md) first (player view, hit/miss, **sample code**, script flow).
 
 ---
 

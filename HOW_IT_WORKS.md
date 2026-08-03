@@ -4,7 +4,7 @@
 
 Back to: [README.md](README.md)
 
-This page explains the **player experience**, what moves on screen, and how your gamemode should use it.
+This page explains the **player experience**, what moves on screen, and how your gamemode should use it — with **sample code** you can copy.
 
 ---
 
@@ -53,6 +53,256 @@ Cancel anytime with `LoadingY_Hide(playerid)` (no success callback).
 
 ---
 
+## Sample 1 — Full minimal gamemode
+
+Copy this into a `.pwn` to see the whole flow.
+
+```pawn
+#include <open.mp>
+#include <loading_y>
+
+enum
+{
+    ACTION_CRAFT,
+    ACTION_HEAL
+}
+
+public OnPlayerConnect(playerid)
+{
+    LoadingY_OnPlayerConnect(playerid);
+    SendClientMessage(playerid, -1, "Type /craft or /heal - press Y on the marker.");
+    return 1;
+}
+
+public OnPlayerDisconnect(playerid, reason)
+{
+    LoadingY_OnPlayerDisconnect(playerid, reason);
+    return 1;
+}
+
+public OnPlayerKeyStateChange(playerid, KEY:newkeys, KEY:oldkeys)
+{
+    // Required: without this, Y does nothing
+    if (LoadingY_OnPlayerKeyStateChange(playerid, newkeys, oldkeys))
+        return 1;
+    return 1;
+}
+
+public OnPlayerCommandText(playerid, cmdtext[])
+{
+    if (!strcmp(cmdtext, "/craft", true))
+    {
+        // Opens bar. Text becomes: PRESS Y TO CRAFTING COMPONENT...
+        LoadingY_Show(playerid, "CRAFTING COMPONENT...", ACTION_CRAFT);
+        return 1;
+    }
+
+    if (!strcmp(cmdtext, "/heal", true))
+    {
+        LoadingY_Show(playerid, "USE MEDKIT", ACTION_HEAL);
+        return 1;
+    }
+
+    if (!strcmp(cmdtext, "/hidey", true))
+    {
+        if (LoadingY_IsActive(playerid))
+            LoadingY_Hide(playerid); // cancel early
+        return 1;
+    }
+    return 0;
+}
+
+// HIT - blue fill was on the marker when they pressed Y
+public OnPlayerLoadingY(playerid, actionid)
+{
+    switch (actionid)
+    {
+        case ACTION_CRAFT:
+        {
+            GivePlayerMoney(playerid, 100);
+            SendClientMessage(playerid, 0x33CC33FF, "Crafted! +$100");
+        }
+        case ACTION_HEAL:
+        {
+            SetPlayerHealth(playerid, 100.0);
+            SendClientMessage(playerid, 0x33CC33FF, "Healed!");
+        }
+    }
+    return 1;
+}
+
+// MISS - wrong timing. Bar keeps looping.
+public OnPlayerLoadingYFail(playerid, actionid)
+{
+    #pragma unused actionid
+    SendClientMessage(playerid, 0xFF6666FF, "Missed - wait and try again.");
+    return 1;
+}
+```
+
+What happens in-game:
+
+1. `/craft` → bar appears  
+2. Blue fill loops left ↔ right  
+3. Press **Y** on marker → money + success message → bar closes  
+4. Press **Y** off marker → “Missed” → bar stays  
+
+---
+
+## Sample 2 — Action ids (one UI, many features)
+
+```pawn
+enum
+{
+    ACTION_CRAFT = 1,
+    ACTION_HEAL,
+    ACTION_LOCKPICK
+}
+
+// Different commands, same UI
+LoadingY_Show(playerid, "CRAFT STEEL", ACTION_CRAFT);
+LoadingY_Show(playerid, "USE MEDKIT", ACTION_HEAL);
+LoadingY_Show(playerid, "LOCKPICK DOOR", ACTION_LOCKPICK);
+
+public OnPlayerLoadingY(playerid, actionid)
+{
+    switch (actionid)
+    {
+        case ACTION_CRAFT:
+        {
+            // give crafted item
+        }
+        case ACTION_HEAL:
+        {
+            SetPlayerHealth(playerid, 100.0);
+        }
+        case ACTION_LOCKPICK:
+        {
+            // unlock door
+        }
+    }
+    return 1;
+}
+```
+
+`actionid` is stored when you call `Show` and returned unchanged in both success and fail callbacks.
+
+---
+
+## Sample 3 — Don’t open twice
+
+```pawn
+if (!strcmp(cmdtext, "/craft", true))
+{
+    if (LoadingY_IsActive(playerid))
+    {
+        SendClientMessage(playerid, -1, "Finish the current prompt first.");
+        return 1;
+    }
+    LoadingY_Show(playerid, "CRAFTING...", ACTION_CRAFT);
+    return 1;
+}
+```
+
+Calling `Show` again while active restarts that player’s prompt (new random marker). Blocking with `IsActive` is usually cleaner.
+
+---
+
+## Sample 4 — Limited fails (close after 3 misses)
+
+By default miss keeps the UI open forever. Use this if you want a limit:
+
+```pawn
+new g_LyFails[MAX_PLAYERS];
+
+public OnPlayerConnect(playerid)
+{
+    LoadingY_OnPlayerConnect(playerid);
+    g_LyFails[playerid] = 0;
+    return 1;
+}
+
+public OnPlayerCommandText(playerid, cmdtext[])
+{
+    if (!strcmp(cmdtext, "/lockpick", true))
+    {
+        g_LyFails[playerid] = 0;
+        LoadingY_Show(playerid, "LOCKPICK", 1);
+        return 1;
+    }
+    return 0;
+}
+
+public OnPlayerLoadingYFail(playerid, actionid)
+{
+    #pragma unused actionid
+    g_LyFails[playerid]++;
+
+    if (g_LyFails[playerid] >= 3)
+    {
+        LoadingY_Hide(playerid);
+        SendClientMessage(playerid, 0xFF6666FF, "Lockpick broken. Too many misses.");
+        return 1;
+    }
+
+    new msg[64];
+    format(msg, sizeof(msg), "Missed (%d/3). Try again.", g_LyFails[playerid]);
+    SendClientMessage(playerid, 0xFF6666FF, msg);
+    return 1;
+}
+
+public OnPlayerLoadingY(playerid, actionid)
+{
+    #pragma unused actionid
+    g_LyFails[playerid] = 0;
+    SendClientMessage(playerid, 0x33CC33FF, "Door unlocked!");
+    return 1;
+}
+```
+
+---
+
+## Sample 5 — Easier / harder difficulty
+
+Put defines **before** the include:
+
+```pawn
+// Easier: slower fill + bigger hit zone
+#define LOADING_Y_SPEED         (1.0)
+#define LOADING_Y_HIT_TOLERANCE (10.0)
+
+#include <open.mp>
+#include <loading_y>
+```
+
+```pawn
+// Harder: faster fill + tighter hit zone
+#define LOADING_Y_SPEED         (2.4)
+#define LOADING_Y_HIT_TOLERANCE (4.0)
+
+#include <open.mp>
+#include <loading_y>
+```
+
+---
+
+## Sample 6 — Read current action while open
+
+```pawn
+if (LoadingY_IsActive(playerid))
+{
+    new actionid = LoadingY_GetActionId(playerid);
+    new text[64];
+    LoadingY_GetActionText(playerid, text, sizeof(text));
+
+    new msg[96];
+    format(msg, sizeof(msg), "Busy: id=%d text=%s", actionid, text);
+    SendClientMessage(playerid, -1, msg);
+}
+```
+
+---
+
 ## How the blue bar moves
 
 Every `LOADING_Y_TICK_MS` (default **30 ms**):
@@ -84,8 +334,6 @@ else
 | Raise `LOADING_Y_HIT_TOLERANCE` | Lower it |
 | Lower `LOADING_Y_SPEED` | Raise speed |
 
-Define these **before** `#include <loading_y>`.
-
 ---
 
 ## Marker positions
@@ -100,69 +348,6 @@ So each prompt feels slightly different — players cannot memorize one fixed sp
 
 ---
 
-## Script flow (for developers)
-
-### 1) Open a prompt
-
-```pawn
-LoadingY_Show(playerid, "CRAFTING COMPONENT...", ACTION_CRAFT);
-```
-
-What the include does:
-
-1. Builds player textdraws (if needed)
-2. Sets title text to `PRESS Y TO CRAFTING COMPONENT...`
-3. Picks a random marker and shows only that one
-4. Starts the fill at the left, moving right
-5. Starts the tick timer
-
-### 2) Wait for callbacks
-
-```pawn
-public OnPlayerLoadingY(playerid, actionid)
-{
-    // They timed it correctly
-    if (actionid == ACTION_CRAFT)
-    {
-        // give item / finish craft / etc.
-    }
-    return 1;
-}
-
-public OnPlayerLoadingYFail(playerid, actionid)
-{
-    // Wrong timing — prompt is STILL open
-    // You can warn them, or do nothing
-    return 1;
-}
-```
-
-Use `actionid` so one UI can mean craft, heal, lockpick, etc.
-
-### 3) Optional helpers while active
-
-| Function | Use |
-|----------|-----|
-| `LoadingY_IsActive(playerid)` | Is the bar open? |
-| `LoadingY_GetActionId(playerid)` | Current action id (`-1` if inactive) |
-| `LoadingY_GetActionText(...)` | Current action string |
-| `LoadingY_Hide(playerid)` | Force close (no success) |
-
----
-
-## Example use cases
-
-| Idea | Show call | On success |
-|------|-----------|------------|
-| Crafting | `LoadingY_Show(playerid, "CRAFT...", ACTION_CRAFT)` | Give crafted item |
-| Heal / medkit | `LoadingY_Show(playerid, "USE MEDKIT", ACTION_HEAL)` | Set health, remove medkit |
-| Lockpick | `LoadingY_Show(playerid, "LOCKPICK", ACTION_LOCK)` | Unlock vehicle/door |
-| Robbery mini-game | `LoadingY_Show(playerid, "CRACK SAFE", ...)` | Give money / progress |
-
-Miss = they keep trying until they hit or you call `LoadingY_Hide`.
-
----
-
 ## What does **not** happen
 
 - It does **not** auto-succeed when the bar passes the marker — they must press **Y**.
@@ -174,29 +359,25 @@ Miss = they keep trying until they hit or you call `LoadingY_Hide`.
 
 ## Wiring checklist
 
-Your gamemode must call these (see [README.md](README.md#install)):
-
 | Hook | Why |
 |------|-----|
 | `LoadingY_OnPlayerConnect` | Reset state / TD ids |
 | `LoadingY_OnPlayerDisconnect` | Destroy TDs + kill timer |
 | `LoadingY_OnPlayerKeyStateChange` | Detect **Y** press |
 
-Without the key hook, the bar animates but **Y** does nothing.
+Without the key hook, the bar animates but **Y** does nothing. See Sample 1.
 
 ---
 
-## Try it
+## Try the included demo
 
-In the test gamemode:
+`gamemodes/loading_y_test.pwn`:
 
 | Command | What happens |
 |---------|----------------|
-| `/craft` | Opens craft prompt |
-| `/heal` | Opens heal prompt |
+| `/craft` | Opens craft prompt → success gives $100 |
+| `/heal` | Opens heal prompt → success sets 100 HP |
 | `/hidey` | Cancels early |
-
-Watch the blue fill, wait for the white marker, press **Y**.
 
 ---
 

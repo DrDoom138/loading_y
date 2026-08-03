@@ -8,28 +8,29 @@ Textdraw layout comes from Nickk's TextDraw editor (`loading_y.pwn`).
 
 ---
 
-## Repo layout (add your files here)
-
-After you upload, this folder should look like:
+## Repo layout
 
 ```
 loading_y/
-├── README.md                 ← this file
+├── README.md              ← install + API
+├── HOW_IT_WORKS.md        ← how the mechanic works (read this)
 ├── include/
-│   └── loading_y.inc         ← drop your include here
+│   └── loading_y.inc
 └── gamemodes/
-    └── loading_y_test.pwn    ← drop your test gamemode here
+    └── loading_y_test.pwn
 ```
 
-Optional: add `LICENSE`, `.gitignore`, screenshots.
+**New here?** Read [HOW_IT_WORKS.md](HOW_IT_WORKS.md) first (player view, hit/miss, script flow).
 
 ---
 
 ## Mechanic
 
+Short version — full detail in [HOW_IT_WORKS.md](HOW_IT_WORKS.md):
+
 1. Show the prompt with `LoadingY_Show`.
 2. Blue fill grows left to right, then shrinks back (loops).
-3. Only **one** grey/white marker is shown (picked randomly from the NTD marker slots).
+3. Only **one** grey/white marker is shown (picked randomly).
 4. Press **Y** when the blue fill reaches that marker.
 5. Hit → `OnPlayerLoadingY` and UI is destroyed.
 6. Miss → `OnPlayerLoadingYFail`, UI stays and keeps looping.
@@ -198,9 +199,8 @@ From this folder:
 cd loading_y
 git init
 git add .
-# copy include/ + gamemodes/ here first, then:
 git commit -m "Initial loading_y release"
 gh repo create loading_y --public --source=. --remote=origin --push
 ```
 
-Or create an empty repo on GitHub and drag-drop `include/`, `gamemodes/`, and this `README.md`.
+Or create an empty repo on GitHub and drag-drop this whole folder.
